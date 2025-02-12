@@ -9,7 +9,9 @@ public class Pawn implements Piece {
     private String name;
     private String color;
     private boolean firstMove = true;
+    private boolean enPassant = false;
     private int id;
+    private boolean possibleEnPassant = false;
 
     Pawn(String color, Position pos){
         this.color = color;
@@ -38,10 +40,28 @@ public class Pawn implements Piece {
     public boolean getFirstMove(){
         return firstMove;
     }
+    public boolean getEnPassant(){
+        return enPassant;
+    }
+    public void setEnPassant(boolean enPassant){
+        this.enPassant = enPassant;
+    }
+
+    public void setPossibleEnPassant(boolean possibleEnPassant) {
+        this.possibleEnPassant = possibleEnPassant;
+    }
+    public boolean getPossibleEnPassant(){
+        return possibleEnPassant;
+    }
 
     public void move(Position pos){
+        if(firstMove) {
+            firstMove = false;
+            if(this.pos.x == pos.x+2 || this.pos.x == pos.x-2){
+                enPassant = true;
+            }
+        }
         this.pos = pos;
-        firstMove = false;
     };
     public List<Position> getPossibleMoves(){
         List<Position> possibleMoves = new java.util.ArrayList<Position>();

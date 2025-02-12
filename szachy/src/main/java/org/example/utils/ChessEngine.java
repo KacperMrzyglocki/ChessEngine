@@ -121,91 +121,11 @@ public class ChessEngine {
         }
         return true;
     }
-
-//    private boolean playerMove(Board board){
-//        boolean choosedPiece = false;
-//        int choicePiece;
-//        String choiceMove;
-//        while(!choosedPiece) {
-//            Piece king = null;
-//            List<Piece> allPieces;
-//            List<Piece> availablePieces = new ArrayList<Piece>();
-//            System.out.println("Choose piece: ");
-//            if (Objects.equals(turn, "Black")) {
-//                allPieces = board.blackPieces;
-//                for(Piece piece : allPieces){
-//                    if(!board.getLegalMoves(piece.getPossibleMoves(),piece).isEmpty()){
-//                        availablePieces.add(piece);
-//                    }
-//                    if(piece instanceof King){
-//                        king = piece;
-//                    }
-//                }
-//                printAvailablePieces(availablePieces);
-//                if(availablePieces.isEmpty()){
-//                    if(board.isCheck(board.whitePieces, king)){
-//                        System.out.println("White checkmated");
-//                        return false;
-//                    } else{
-//                        System.out.println("Stalemate");
-//                        return false;
-//                    }
-//                }
-//            } else {
-//                allPieces = board.whitePieces;
-//                for(Piece piece : allPieces){
-//                    if(!board.getLegalMoves(piece.getPossibleMoves(),piece).isEmpty()){
-//                        availablePieces.add(piece);
-//                    }
-//                    if(piece instanceof King){
-//                        king = piece;
-//                    }
-//                }
-//                printAvailablePieces(availablePieces);
-//                if(availablePieces.isEmpty()){
-//                    if(board.isCheck(board.blackPieces, king)){
-//                        System.out.println("Black checkmated");
-//                        return false;
-//                    } else{
-//                        System.out.println("Stalemate");
-//                        return false;
-//                    }
-//                }
-//            }
-//            System.out.print("?>");
-//            Scanner scanner = new Scanner(System.in);
-//            choicePiece = scanner.nextInt();
-//            for(Piece piece : availablePieces){
-//                if(piece.getId() == choicePiece){
-//                    choosedPiece = true;
-//                    boolean choosedMove = false;
-//                    List<Position> legalMoves = new java.util.ArrayList<Position>();
-//                    while(!choosedMove){
-//                        legalMoves = board.getLegalMoves(piece.getPossibleMoves(), piece);
-//                        printAvailableMoves(legalMoves);
-//                        System.out.print("?>");
-//                        Scanner scanner2 = new Scanner(System.in);
-//                        choiceMove = scanner2.nextLine();
-//                        choosedMove = makeMove(choiceMove, legalMoves, piece, board);
-//                        if ((Objects.equals(piece.getSymbol(), "K")) && (Objects.equals(choiceMove, "g1") || Objects.equals(choiceMove, "g8"))) {
-//                            board.castle(piece, "Right");
-//                        }
-//                        if ((Objects.equals(piece.getSymbol(), "K")) && (Objects.equals(choiceMove, "c1") || Objects.equals(choiceMove, "c8"))) {
-//                            board.castle(piece, "Left");
-//                        }
-//                    }
-//                }
-//            }
-//            if(!choosedPiece){
-//                System.out.println("There is no such piece");
-//            }
-//        }
-//        return true;
-//    }
     private boolean makeMove(String choice, List<Position> legalMoves, Piece piece, Board board){
         for(Position legalMove : legalMoves){
             String translatedPosition = legalMove.translatePosition();
             if(translatedPosition.equals(choice)){
+                setEnPassant(board);
                 piece.move(legalMove);
                 board.deleteTakenPieces(piece);
                 return true;
@@ -213,6 +133,38 @@ public class ChessEngine {
         }
         System.out.println("There is no such move available");
         return false;
+    }
+    private void setEnPassant(Board board){
+        for(Piece piece : board.blackPieces){
+            if(Objects.equals(piece.getSymbol(), "P")){
+                if(((Pawn) piece).getEnPassant()){
+                    ((Pawn) piece).setEnPassant(false);
+                }
+            }
+        }
+        for(Piece piece : board.whitePieces){
+            if(Objects.equals(piece.getSymbol(), "P")){
+                if(((Pawn) piece).getEnPassant()){
+                    ((Pawn) piece).setEnPassant(false);
+                }
+            }
+        }
+    }
+    private void setPossibleEnPassant(Board board){
+        for(Piece piece : board.blackPieces){
+            if(Objects.equals(piece.getSymbol(), "P")){
+                if(((Pawn) piece).getPossibleEnPassant()){
+                    ((Pawn) piece).setPossibleEnPassant(false);
+                }
+            }
+        }
+        for(Piece piece : board.whitePieces){
+            if(Objects.equals(piece.getSymbol(), "P")){
+                if(((Pawn) piece).getPossibleEnPassant()){
+                    ((Pawn) piece).setPossibleEnPassant(false);
+                }
+            }
+        }
     }
     private void printAvailablePieces(List<Piece> availablePieces){
         for(Piece piece : availablePieces) {

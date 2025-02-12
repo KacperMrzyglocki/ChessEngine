@@ -386,6 +386,14 @@ public class Board {
                 if((blackPos.x==pos.x-1) && ((blackPos.y==pos.y+1) || (blackPos.y==pos.y-1))){
                     legalMoves.add(blackPos);
                 }
+                if(blackPiece instanceof Pawn){
+                    if(((Pawn) blackPiece).getEnPassant()){
+                        if((blackPos.x == pos.x) && (blackPos.y == pos.y+1 || blackPos.y == pos.y-1)){
+                            legalMoves.add(new Position(blackPos.x-1,blackPos.y));
+                            ((Pawn) piece).setPossibleEnPassant(true);
+                        }
+                    }
+                }
             }
         } else{
             for(Piece blackPiece : blackPieces){
@@ -398,6 +406,14 @@ public class Board {
                 legalMoves = legalMoves.stream().filter(p -> (p.x != whitePos.x) || (p.y != whitePos.y)).collect(Collectors.toList());
                 if((whitePos.x==pos.x+1) && ((whitePos.y==pos.y+1) || (whitePos.y==pos.y-1))){
                     legalMoves.add(whitePos);
+                }
+                if(whitePiece instanceof Pawn){
+                    if(((Pawn) whitePiece).getEnPassant()){
+                        if((whitePos.x == pos.x) && (whitePos.y == pos.y+1 || whitePos.y == pos.y-1)){
+                            legalMoves.add(new Position(whitePos.x+1,whitePos.y));
+                            ((Pawn) piece).setPossibleEnPassant(true);
+                        }
+                    }
                 }
             }
         }
@@ -848,12 +864,32 @@ public class Board {
                     blackPieces.remove(blackPiece);
                     return blackPiece;
                 }
+                if(piece instanceof  Pawn) {
+                    if (blackPiece instanceof Pawn) {
+                        if (((Pawn) piece).getPossibleEnPassant()) {
+                            if ((blackPiece.getPosition().x == piece.getPosition().x + 1) && (blackPiece.getPosition().y == piece.getPosition().y)) {
+                                blackPieces.remove(blackPiece);
+                                return blackPiece;
+                            }
+                        }
+                    }
+                }
             }
         }else{
             for(Piece whitePiece : whitePieces){
                 if((whitePiece.getPosition().x == piece.getPosition().x) && (whitePiece.getPosition().y == piece.getPosition().y)){
                     whitePieces.remove(whitePiece);
                     return whitePiece;
+                }
+                if(piece instanceof  Pawn) {
+                    if (whitePiece instanceof Pawn) {
+                        if (((Pawn) piece).getPossibleEnPassant()) {
+                            if ((whitePiece.getPosition().x == piece.getPosition().x - 1) && (whitePiece.getPosition().y == piece.getPosition().y)) {
+                                whitePieces.remove(whitePiece);
+                                return whitePiece;
+                            }
+                        }
+                    }
                 }
             }
         }
