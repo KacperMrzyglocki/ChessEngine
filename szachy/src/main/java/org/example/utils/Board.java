@@ -3,6 +3,7 @@ package org.example.utils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Scanner;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
@@ -894,5 +895,73 @@ public class Board {
             }
         }
         return null;
+    }
+    public void checkPromotion(Piece piece){
+        if(Objects.equals(piece.getColor(), "White")){
+            if(piece.getPosition().x == 0){
+                String symbol = choosePromotion();
+                Position position = piece.getPosition();
+                int id = piece.getId();
+                whitePieces.remove(piece);
+                switch(symbol){
+                    case "Q":
+                        whitePieces.addLast(new Queen("White", position));
+                        break;
+                    case "R":
+                        whitePieces.addLast(new Rook("White", position));
+                        break;
+                    case "B":
+                        whitePieces.addLast(new Bishop("White", position));
+                        break;
+                    case "N":
+                        whitePieces.addLast(new Knight("White", position));
+                        break;
+                }
+                whitePieces.getLast().setId(id);
+            }
+        } else{
+            if(piece.getPosition().x == 7){
+                String symbol = choosePromotion();
+                Position position = piece.getPosition();
+                int id = piece.getId();
+                blackPieces.remove(piece);
+                switch(symbol){
+                    case "Q":
+                        blackPieces.addLast(new Queen("Black", position));
+                        break;
+                    case "R":
+                        blackPieces.addLast(new Rook("Black", position));
+                        break;
+                    case "B":
+                        blackPieces.addLast(new Bishop("Black", position));
+                        break;
+                    case "N":
+                        blackPieces.addLast(new Knight("Black", position));
+                        break;
+                }
+                blackPieces.getLast().setId(id);
+            }
+        }
+    }
+    private String choosePromotion(){
+        System.out.println("Choose promotion: ");
+        System.out.println("1. Queen");
+        System.out.println("2. Rook");
+        System.out.println("3. Bishop");
+        System.out.println("4. Knight");
+        Scanner scanner = new Scanner(System.in);
+        int choice = scanner.nextInt();
+        switch(choice){
+            case 1:
+                return "Q";
+            case 2:
+                return "R";
+            case 3:
+                return "B";
+            case 4:
+                return "N";
+            default:
+                return "Q";
+        }
     }
 }

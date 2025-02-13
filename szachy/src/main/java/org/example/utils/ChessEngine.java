@@ -128,6 +128,9 @@ public class ChessEngine {
                 setEnPassant(board);
                 piece.move(legalMove);
                 board.deleteTakenPieces(piece);
+                if(piece instanceof Pawn){
+                    board.checkPromotion(piece);
+                }
                 return true;
             }
         }
@@ -146,22 +149,6 @@ public class ChessEngine {
             if(Objects.equals(piece.getSymbol(), "P")){
                 if(((Pawn) piece).getEnPassant()){
                     ((Pawn) piece).setEnPassant(false);
-                }
-            }
-        }
-    }
-    private void setPossibleEnPassant(Board board){
-        for(Piece piece : board.blackPieces){
-            if(Objects.equals(piece.getSymbol(), "P")){
-                if(((Pawn) piece).getPossibleEnPassant()){
-                    ((Pawn) piece).setPossibleEnPassant(false);
-                }
-            }
-        }
-        for(Piece piece : board.whitePieces){
-            if(Objects.equals(piece.getSymbol(), "P")){
-                if(((Pawn) piece).getPossibleEnPassant()){
-                    ((Pawn) piece).setPossibleEnPassant(false);
                 }
             }
         }
