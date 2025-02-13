@@ -479,28 +479,28 @@ public class Board {
                         continue;
                     }
                     else {
-                        legalMoves = legalMoves.stream().filter(p -> !(p.x > blackPieceOnRightDown.x)).toList();
+                        legalMoves = legalMoves.stream().filter(p -> !(p.x > blackPieceOnRightDown.x && p.y >blackPieceOnRightDown.y)).toList();
                     }
                 } else if(legalMove.x > pos.x && legalMove.y < pos.y){
                     if(blackPieceOnLeftDown == null){
                         continue;
                     }
                     else{
-                        legalMoves = legalMoves.stream().filter(p -> !(p.x > blackPieceOnLeftDown.x)).toList();
+                        legalMoves = legalMoves.stream().filter(p -> !(p.x > blackPieceOnLeftDown.x && p.y <blackPieceOnLeftDown.y)).toList();
                     }
                 } else if(legalMove.x < pos.x && legalMove.y > pos.y){
                     if(blackPieceOnRightUp == null){
                         continue;
                     }
                     else{
-                        legalMoves = legalMoves.stream().filter(p -> !(p.x < blackPieceOnRightUp.x)).toList();
+                        legalMoves = legalMoves.stream().filter(p -> !(p.x < blackPieceOnRightUp.x && p.y >blackPieceOnRightUp.y)).toList();
                     }
                 } else if(legalMove.x < pos.x && legalMove.y < pos.y){
                     if(blackPieceOnLeftUp == null){
                         continue;
                     }
                     else{
-                        legalMoves = legalMoves.stream().filter(p -> !(p.x < blackPieceOnLeftUp.x)).toList();
+                        legalMoves = legalMoves.stream().filter(p -> !(p.x < blackPieceOnLeftUp.x && p.y <blackPieceOnLeftUp.y)).toList();
                     }
                 }
             }
@@ -553,28 +553,28 @@ public class Board {
                         continue;
                     }
                     else {
-                        legalMoves = legalMoves.stream().filter(p -> !(p.x > whitePieceOnRightDown.x)).toList();
+                        legalMoves = legalMoves.stream().filter(p -> !(p.x > whitePieceOnRightDown.x && p.y > whitePieceOnRightDown.y)).toList();
                     }
                 } else if(legalMove.x > pos.x && legalMove.y < pos.y){
                     if(whitePieceOnLeftDown == null){
                         continue;
                     }
                     else{
-                        legalMoves = legalMoves.stream().filter(p -> !(p.x > whitePieceOnLeftDown.x)).toList();
+                        legalMoves = legalMoves.stream().filter(p -> !(p.x > whitePieceOnLeftDown.x && p.y < whitePieceOnLeftDown.y)).toList();
                     }
                 } else if(legalMove.x < pos.x && legalMove.y > pos.y){
                     if(whitePieceOnRightUp == null){
                         continue;
                     }
                     else{
-                        legalMoves = legalMoves.stream().filter(p -> !(p.x < whitePieceOnRightUp.x)).toList();
+                        legalMoves = legalMoves.stream().filter(p -> !(p.x < whitePieceOnRightUp.x && p.y > whitePieceOnRightUp.y)).toList();
                     }
                 } else if(legalMove.x < pos.x && legalMove.y < pos.y){
                     if(whitePieceOnLeftUp == null){
                         continue;
                     }
                     else{
-                        legalMoves = legalMoves.stream().filter(p -> !(p.x < whitePieceOnLeftUp.x)).toList();
+                        legalMoves = legalMoves.stream().filter(p -> !(p.x < whitePieceOnLeftUp.x && p.y < whitePieceOnLeftUp.y)).toList();
                     }
                 }
             }
@@ -896,72 +896,101 @@ public class Board {
         }
         return null;
     }
-    public void checkPromotion(Piece piece){
+    public boolean checkPromotion(Piece piece){
         if(Objects.equals(piece.getColor(), "White")){
             if(piece.getPosition().x == 0){
-                String symbol = choosePromotion();
-                Position position = piece.getPosition();
-                int id = piece.getId();
-                whitePieces.remove(piece);
-                switch(symbol){
-                    case "Q":
-                        whitePieces.addLast(new Queen("White", position));
-                        break;
-                    case "R":
-                        whitePieces.addLast(new Rook("White", position));
-                        break;
-                    case "B":
-                        whitePieces.addLast(new Bishop("White", position));
-                        break;
-                    case "N":
-                        whitePieces.addLast(new Knight("White", position));
-                        break;
-                }
-                whitePieces.getLast().setId(id);
+                return true;
             }
         } else{
             if(piece.getPosition().x == 7){
-                String symbol = choosePromotion();
-                Position position = piece.getPosition();
-                int id = piece.getId();
-                blackPieces.remove(piece);
-                switch(symbol){
-                    case "Q":
-                        blackPieces.addLast(new Queen("Black", position));
-                        break;
-                    case "R":
-                        blackPieces.addLast(new Rook("Black", position));
-                        break;
-                    case "B":
-                        blackPieces.addLast(new Bishop("Black", position));
-                        break;
-                    case "N":
-                        blackPieces.addLast(new Knight("Black", position));
-                        break;
-                }
-                blackPieces.getLast().setId(id);
+
+                return true;
             }
         }
+        return false;
     }
-    private String choosePromotion(){
-        System.out.println("Choose promotion: ");
-        System.out.println("1. Queen");
-        System.out.println("2. Rook");
-        System.out.println("3. Bishop");
-        System.out.println("4. Knight");
-        Scanner scanner = new Scanner(System.in);
-        int choice = scanner.nextInt();
-        switch(choice){
-            case 1:
-                return "Q";
-            case 2:
-                return "R";
-            case 3:
-                return "B";
-            case 4:
-                return "N";
-            default:
-                return "Q";
+    public void promotePawn(Pawn pawn, String choice) {
+        if(Objects.equals(pawn.getColor(), "White")){
+            Position position = pawn.getPosition();
+            int id = pawn.getId();
+            whitePieces.remove(pawn);
+            switch(choice){
+                case "Queen":
+                    whitePieces.addLast(new Queen("White", position));
+                    break;
+                case "Rook":
+                    whitePieces.addLast(new Rook("White", position));
+                    break;
+                case "Bishop":
+                    whitePieces.addLast(new Bishop("White", position));
+                    break;
+                case "Knight":
+                    whitePieces.addLast(new Knight("White", position));
+                    break;
+            }
+            whitePieces.getLast().setId(id);
+        } else{
+            Position position = pawn.getPosition();
+            int id = pawn.getId();
+            blackPieces.remove(pawn);
+            switch(choice){
+                case "Queen":
+                    blackPieces.addLast(new Queen("Black", position));
+                    break;
+                case "Rook":
+                    blackPieces.addLast(new Rook("Black", position));
+                    break;
+                case "Bishop":
+                    blackPieces.addLast(new Bishop("Black", position));
+                    break;
+                case "Knight":
+                    blackPieces.addLast(new Knight("Black", position));
+                    break;
+            }
+            blackPieces.getLast().setId(id);
         }
+    }
+
+    public int checkMate(String side){
+        List<Piece> availablePieces = new ArrayList<>();
+        Piece king = null;
+        if(side == "White"){
+            for (Piece piece : whitePieces) {
+                if (!getLegalMoves(piece.getPossibleMoves(), piece).isEmpty()) {
+                    availablePieces.add(piece);
+                }
+                if (piece instanceof King) {
+                    king = piece;
+                }
+            }
+            if (availablePieces.isEmpty()) {
+                if (isCheck(blackPieces, king)) {
+                    System.out.println("Black checkmated");
+                    return 2;
+                } else {
+                    System.out.println("Stalemate");
+                    return 1;
+                }
+            }
+        } else{
+            for (Piece piece : blackPieces) {
+                if (!getLegalMoves(piece.getPossibleMoves(), piece).isEmpty()) {
+                    availablePieces.add(piece);
+                }
+                if (piece instanceof King) {
+                    king = piece;
+                }
+            }
+            if (availablePieces.isEmpty()) {
+                if (isCheck(whitePieces, king)) {
+                    System.out.println("White checkmated");
+                    return 2;
+                } else {
+                    System.out.println("Stalemate");
+                    return 1;
+                }
+            }
+        }
+        return 0;
     }
 }
