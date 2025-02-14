@@ -10,4 +10,5 @@ public interface Piece {
     public int getId();
     public String getSymbol();
     public String getColor();
+    public Piece copy();
 }

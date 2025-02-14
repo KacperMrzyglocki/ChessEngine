@@ -18,6 +18,20 @@ public class Pawn implements Piece {
         this.name = color + " pawn";
         this.pos = pos;
     }
+    Pawn(String color, Position pos, int id, boolean firstMove, boolean enPassant, boolean possibleEnPassant){
+        this.color = color;
+        this.name = color + " pawn";
+        this.pos = pos;
+        this.firstMove = firstMove;
+        this.enPassant = enPassant;
+        this.possibleEnPassant = possibleEnPassant;
+        this.id = id;
+    }
+
+    @Override
+    public Piece copy() {
+        return new Pawn(this.color, this.pos,this.id,this.firstMove,this.enPassant,this.possibleEnPassant);
+    }
 
     public Position getPosition(){
         return pos;

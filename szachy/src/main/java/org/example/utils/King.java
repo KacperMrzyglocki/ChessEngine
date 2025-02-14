@@ -18,6 +18,17 @@ public class King implements Piece {
         this.name = color + " king";
         this.pos = pos;
     }
+    King(String color, Position pos, boolean moved){
+        this.color = color;
+        this.name = color + " king";
+        this.pos = pos;
+        this.moved = moved;
+    }
+
+    @Override
+    public Piece copy() {
+        return new King(color, pos, moved);
+    }
 
     public Position getPosition(){
         return pos;

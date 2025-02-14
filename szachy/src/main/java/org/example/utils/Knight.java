@@ -16,6 +16,15 @@ public class Knight implements Piece {
         this.name = color + " knight";
         this.pos = pos;
     }
+    Knight(String color, Position pos,int id){
+        this.color = color;
+        this.name = color + " knight";
+        this.pos = pos;
+        this.id = id;
+    }
+    public Piece copy(){
+        return new Knight(color, pos, id);
+    }
 
     public Position getPosition(){
         return pos;

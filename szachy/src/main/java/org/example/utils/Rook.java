@@ -15,6 +15,17 @@ public class Rook implements Piece {
         this.name = color + " rook";
         this.pos = pos;
     }
+    Rook(String color, Position pos, boolean moved){
+        this.color = color;
+        this.name = color + " rook";
+        this.pos = pos;
+        this.moved = moved;
+    }
+
+    @Override
+    public Piece copy() {
+        return new Rook(color, pos, moved);
+    }
 
     public void move(Position pos){
         this.pos = pos;

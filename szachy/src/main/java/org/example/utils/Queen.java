@@ -14,6 +14,11 @@ public class Queen implements Piece {
         this.pos = pos;
     }
 
+    @Override
+    public Piece copy() {
+        return new Queen(color, pos);
+    }
+
     public void move(Position pos){
         this.pos = pos;
     };

@@ -14,6 +14,11 @@ public class Bishop implements Piece {
         this.pos = pos;
     }
 
+    @Override
+    public Piece copy() {
+        return new Bishop(color, pos);
+    }
+
     public Position getPosition(){
         return pos;
     }

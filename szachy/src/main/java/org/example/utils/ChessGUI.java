@@ -1,13 +1,19 @@
 package org.example.utils;
 
+import java.util.concurrent.*;
+
+import java.util.stream.Collectors;
+
 import javafx.application.Application;
+import javafx.application.Platform;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
-import javafx.scene.control.ChoiceDialog;
+import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Text;
@@ -24,6 +30,19 @@ public class ChessGUI extends Application {
     private Position selectedPosition = null;
     private GridPane gridPane;
     private String currentTurn = "White";
+    private Label whiteTimeLabel;
+    private Label blackTimeLabel;
+    private Button startGameButton;
+    private Button surrenderButton;
+    private boolean gameStarted = false;
+    private Timer whiteTimer;
+    private Timer blackTimer;
+    private TimerTask whiteTask;
+    private TimerTask blackTask;
+    private ChoiceBox<String> timerChoiceBox;
+    private ChoiceBox<String> gameModeChoiceBox;
+    private String playerSide;
+    private Label sideLabel;
 
     @Override
     public void start(Stage primaryStage) {
@@ -31,43 +50,91 @@ public class ChessGUI extends Application {
         board.initializeBoard();
         gridPane = new GridPane();
         drawBoard();
+        initializeOverlay();
 
-        Scene scene = new Scene(gridPane, WIDTH * TILE_SIZE, HEIGHT * TILE_SIZE);
+        VBox root = new VBox();
+        root.getChildren().addAll(gridPane, createOverlay());
+
+        Scene scene = new Scene(root, WIDTH * TILE_SIZE, HEIGHT * TILE_SIZE + 100);
         primaryStage.setTitle("Chess Game");
         primaryStage.setScene(scene);
         primaryStage.show();
     }
 
+    private void resetGame() {
+        board = new Board();
+        board.initializeBoard();
+        currentTurn = "White";
+        gameStarted = false;
+        drawBoard();
+        whiteTimeLabel.setText("White Time: 00:00");
+        blackTimeLabel.setText("Black Time: 00:00");
+        startGameButton.setDisable(false);
+        surrenderButton.setVisible(false);
+    }
+
     private void drawBoard() {
-        if(currentTurn.equals("White")){
-            if(board.checkMate("White")==2){
+        if (currentTurn.equals("White")) {
+            if (board.checkMate("White") == 2) {
+                if (whiteTask != null) {
+                    whiteTask.cancel();
+                }
+                if (blackTask != null) {
+                    blackTask.cancel();
+                }
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("Game Over");
                 alert.setHeaderText(null);
                 alert.setContentText("Black wins!");
                 alert.showAndWait();
+                resetGame();
+                return;
             }
-            if(board.checkMate("Black")==1){
+            if (board.checkMate("Black") == 1) {
+                if (whiteTask != null) {
+                    whiteTask.cancel();
+                }
+                if (blackTask != null) {
+                    blackTask.cancel();
+                }
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("Game Over");
                 alert.setHeaderText(null);
                 alert.setContentText("Stalemate!");
                 alert.showAndWait();
+                resetGame();
+                return;
             }
-        }else{
-            if(board.checkMate("Black")==2){
+        } else {
+            if (board.checkMate("Black") == 2) {
+                if (whiteTask != null) {
+                    whiteTask.cancel();
+                }
+                if (blackTask != null) {
+                    blackTask.cancel();
+                }
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("Game Over");
                 alert.setHeaderText(null);
                 alert.setContentText("White Wins!");
                 alert.showAndWait();
+                resetGame();
+                return;
             }
-            if(board.checkMate("Black")==1){
+            if (board.checkMate("Black") == 1) {
+                if (whiteTask != null) {
+                    whiteTask.cancel();
+                }
+                if (blackTask != null) {
+                    blackTask.cancel();
+                }
                 Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("Game Over");
                 alert.setHeaderText(null);
                 alert.setContentText("Stalemate!");
                 alert.showAndWait();
+                resetGame();
+                return;
             }
         }
         gridPane.getChildren().clear();
@@ -84,6 +151,181 @@ public class ChessGUI extends Application {
         }
     }
 
+    private void initializeOverlay() {
+        whiteTimeLabel = new Label("White Time: 00:00");
+        blackTimeLabel = new Label("Black Time: 00:00");
+        startGameButton = new Button("Start Game");
+        startGameButton.setOnAction(e -> startGame());
+
+        surrenderButton = new Button("Surrender");
+        surrenderButton.setOnAction(e -> surrenderGame());
+        surrenderButton.setVisible(false);
+
+        timerChoiceBox = new ChoiceBox<>();
+        timerChoiceBox.getItems().addAll("1 min", "5 mins", "10 mins", "30 mins");
+        timerChoiceBox.setValue("5 mins"); // Default value
+
+        gameModeChoiceBox = new ChoiceBox<>();
+        gameModeChoiceBox.getItems().addAll("vs Player", "vs Bot");
+        gameModeChoiceBox.setValue("vs Player"); // Default value
+
+        sideLabel = new Label("Side: ");
+    }
+
+    private HBox createOverlay() {
+        HBox overlay = new HBox();
+        VBox timeBox = new VBox();
+        timeBox.getChildren().addAll(whiteTimeLabel, blackTimeLabel);
+
+        HBox startGameBox = new HBox();
+        startGameBox.getChildren().addAll(startGameButton, sideLabel);
+        startGameBox.setSpacing(10); // Add some spacing between the button and the label
+
+        VBox configBox = new VBox();
+        configBox.getChildren().addAll(timerChoiceBox, gameModeChoiceBox, startGameBox, surrenderButton);
+        overlay.getChildren().addAll(timeBox, configBox);
+        return overlay;
+    }
+
+    private void startGame() {
+        // Initialize the game state
+        currentTurn = "White";
+        gameStarted = true; // Set the flag to true when the game starts
+        drawBoard();
+
+        // Disable the start game button and show the surrender button
+        startGameButton.setDisable(true);
+        surrenderButton.setVisible(true);
+
+        // Get the selected time in seconds
+        int selectedTime = 300; // Default to 5 minutes
+        switch (timerChoiceBox.getValue()) {
+            case "1 min":
+                selectedTime = 60;
+                break;
+            case "5 mins":
+                selectedTime = 300;
+                break;
+            case "10 mins":
+                selectedTime = 600;
+                break;
+            case "30 mins":
+                selectedTime = 1800;
+                break;
+        }
+
+        // Get the selected game mode
+        String gameMode = gameModeChoiceBox.getValue();
+
+        // Handle game mode
+        if (gameMode.equals("vs Bot")) {
+            playerSide = showSideSelectionDialog();
+            if (playerSide.equals("Random")) {
+                playerSide = Math.random() < 0.5 ? "White" : "Black";
+            }
+            sideLabel.setText("Side: " + playerSide);
+            if (playerSide.equals("Black")) {
+                currentTurn = "White";
+                Platform.runLater(this::handleBotMove); // Bot makes the first move if player is black
+            }
+        } else {
+            sideLabel.setText("Side: ");
+        }
+
+        // Start the timers for each player
+        whiteTimer = new Timer();
+        blackTimer = new Timer();
+
+        int finalSelectedTime = selectedTime;
+        whiteTask = new TimerTask() {
+            int whiteTime = finalSelectedTime;
+            @Override
+            public void run() {
+                if (currentTurn.equals("White")) {
+                    whiteTime--;
+                    int minutes = whiteTime / 60;
+                    int seconds = whiteTime % 60;
+                    Platform.runLater(() -> whiteTimeLabel.setText(String.format("White Time: %02d:%02d", minutes, seconds)));
+                    if (whiteTime <= 0) {
+                        Platform.runLater(() -> {
+                            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                            alert.setTitle("Game Over");
+                            alert.setHeaderText(null);
+                            alert.setContentText("Black wins by timeout!");
+                            alert.showAndWait();
+                            resetGame();
+                        });
+                        whiteTask.cancel();
+                        blackTask.cancel();
+                    }
+                }
+            }
+        };
+
+        int finalSelectedTime1 = selectedTime;
+        blackTask = new TimerTask() {
+            int blackTime = finalSelectedTime1;
+            @Override
+            public void run() {
+                if (currentTurn.equals("Black")) {
+                    blackTime--;
+                    int minutes = blackTime / 60;
+                    int seconds = blackTime % 60;
+                    Platform.runLater(() -> blackTimeLabel.setText(String.format("Black Time: %02d:%02d", minutes, seconds)));
+                    if (blackTime <= 0) {
+                        Platform.runLater(() -> {
+                            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                            alert.setTitle("Game Over");
+                            alert.setHeaderText(null);
+                            alert.setContentText("White wins by timeout!");
+                            alert.showAndWait();
+                            resetGame();
+                        });
+                        whiteTask.cancel();
+                        blackTask.cancel();
+                    }
+                }
+            }
+        };
+
+        whiteTimer.scheduleAtFixedRate(whiteTask, 0, 1000);
+        blackTimer.scheduleAtFixedRate(blackTask, 0, 1000);
+    }
+
+    private String showSideSelectionDialog() {
+        List<String> choices = Arrays.asList("White", "Black", "Random");
+        ChoiceDialog<String> dialog = new ChoiceDialog<>("Random", choices);
+        dialog.setTitle("Choose Side");
+        dialog.setHeaderText("Select your side");
+        dialog.setContentText("Choose your side:");
+        Optional<String> result = dialog.showAndWait();
+        return result.orElse("Random");
+    }
+
+    private void surrenderGame() {
+        // End the game and reset the state
+        if (whiteTask != null) {
+            whiteTask.cancel();
+        }
+        if (blackTask != null) {
+            blackTask.cancel();
+        }
+        if(currentTurn.equals("White")){
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("Game Over");
+            alert.setHeaderText(null);
+            alert.setContentText("Black wins by surrender!");
+            alert.showAndWait();
+        } else {
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("Game Over");
+            alert.setHeaderText(null);
+            alert.setContentText("White wins by surrender!");
+            alert.showAndWait();
+        }
+        resetGame();
+
+    }
     private void addPieceImage(int row, int col) {
         for (Piece piece : board.whitePieces) {
             if (piece.getPosition().x == row && piece.getPosition().y == col) {
@@ -127,6 +369,9 @@ public class ChessGUI extends Application {
     }
 
     private void handleTileClick(MouseEvent event, int row, int col) {
+        if (!gameStarted) {
+            return; // Ignore clicks if the game has not started
+        }
         Position clickedPosition = new Position(row, col);
         if (selectedPosition == null) {
             if (isPieceAt(clickedPosition) && isCurrentPlayerPiece(clickedPosition)) {
@@ -139,6 +384,9 @@ public class ChessGUI extends Application {
             if (isValidMove(selectedPosition, clickedPosition)) {
                 movePiece(selectedPosition, clickedPosition);
                 switchTurn();
+                if (gameModeChoiceBox.getValue().equals("vs Bot") && !currentTurn.equals(playerSide)) {
+                    handleBotMove();
+                }
             }
             selectedPosition = null;
             drawBoard();
@@ -259,7 +507,9 @@ public class ChessGUI extends Application {
 
     private void switchTurn() {
         currentTurn = currentTurn.equals("White") ? "Black" : "White";
-        System.out.println("Turn: " + currentTurn);
+        if (gameModeChoiceBox.getValue().equals("vs Bot") && !currentTurn.equals(playerSide)) {
+            handleBotMove();
+        }
     }
 
     private void highlightSelectedTile(int row, int col, Color color) {
@@ -267,6 +517,40 @@ public class ChessGUI extends Application {
         highlight.setFill(color);
         highlight.setOpacity(0.5);
         gridPane.add(highlight, col, row);
+    }
+
+    private void handleBotMove() {
+        Board copiedBoard = board.copy(); // Create a copy of the board
+        int bestValue = currentTurn.equals("White") ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+        Piece bestPiece = null;
+        Position bestMove = null;
+
+        List<Piece> botPieces = currentTurn.equals("White") ? copiedBoard.whitePieces : copiedBoard.blackPieces;
+
+        for (Piece piece : botPieces) {
+            List<Position> legalMoves = copiedBoard.getLegalMoves(piece.getPossibleMoves(), piece);
+            for (Position move : legalMoves) {
+                Position originalPosition = piece.getPosition();
+                piece.move(move);
+                int moveValue = copiedBoard.minimax(2, !currentTurn.equals("White"), Integer.MIN_VALUE, Integer.MAX_VALUE); // Depth of 3 for example
+                piece.move(originalPosition);
+
+                if (currentTurn.equals("White") && moveValue > bestValue) {
+                    bestValue = moveValue;
+                    bestPiece = piece;
+                    bestMove = move;
+                } else if (currentTurn.equals("Black") && moveValue < bestValue) {
+                    bestValue = moveValue;
+                    bestPiece = piece;
+                    bestMove = move;
+                }
+            }
+        }
+
+        if (bestPiece != null && bestMove != null) {
+            movePiece(bestPiece.getPosition(), bestMove);
+            switchTurn();
+        }
     }
 
     public static void main(String[] args) {
