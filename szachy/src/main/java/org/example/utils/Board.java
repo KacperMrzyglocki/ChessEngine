@@ -5,14 +5,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveTask;
 import java.util.stream.Collectors;
-import java.util.concurrent.*;
 
 public class Board {
 
     public List<Piece> blackPieces = new CopyOnWriteArrayList<>();
     public List<Piece> whitePieces = new CopyOnWriteArrayList<>();
-    private static final int MAX_RECURSION_DEPTH = 1;
-    private HashMap<String, HashSet<Position>> cachedEnemyAttackPositions = new HashMap<>();
     private static Map<Piece, Integer> pieceValueCache = new HashMap<>();
 
     private final Position[][] board = {
@@ -26,36 +23,69 @@ public class Board {
             {new Position(7,0),new Position(7,1),new Position(7,2),new Position(7,3),new Position(7,4),new Position(7,5),new Position(7,6),new Position(7,7)},
     };
     private static final int[][] PAWN_POSITIONAL_VALUES = {
-            { 0,  0,  0,  0,  0,  0,  0,  0},
-            {50, 50, 50, 50, 50, 50, 50, 50},
-            {10, 10, 20, 30, 30, 20, 10, 10},
-            { 5,  5, 10, 25, 25, 10,  5,  5},
-            { 0,  0,  0, 20, 20,  0,  0,  0},
-            { 5, -5, -10,  0,  0, -10, -5,  5},
-            { 5, 10, 10, -20, -20, 10, 10,  5},
-            { 0,  0,  0,  0,  0,  0,  0,  0}
+            {5, 5, 5, 5, 5, 5, 5, 5},
+            {2, 2, 2, 2, 2, 2, 2, 2},
+            {2, 2, 3, 3, 3, 3, 2, 2},
+            {2, 3, 3, 4, 4, 3, 3, 2},
+            {2, 3, 3, 4, 4, 3, 3, 2},
+            {2, 2, 3, 3, 3, 3, 2, 2},
+            {2, 2, 2, 2, 2, 2, 2, 2},
+            {5, 5, 5, 5, 5, 5, 5, 5}
     };
 
     private static final int[][] KNIGHT_POSITIONAL_VALUES = {
-            {-50, -40, -30, -30, -30, -30, -40, -50},
-            {-40, -20,   0,   5,   5,   0, -20, -40},
-            {-30,   5,  10,  15,  15,  10,   5, -30},
-            {-30,   0,  15,  20,  20,  15,   0, -30},
-            {-30,   5,  15,  20,  20,  15,   5, -30},
-            {-30,   0,  10,  15,  15,  10,   0, -30},
-            {-40, -20,   0,   0,   0,   0, -20, -40},
-            {-50, -40, -30, -30, -30, -30, -40, -50}
+            {1, 2, 2, 2, 2, 2, 2, 1},
+            {2, 3, 3, 3, 3, 3, 3, 2},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {2, 3, 3, 3, 3, 3, 3, 2},
+            {1, 2, 2, 2, 2, 2, 2, 1}
     };
 
     private static final int[][] BISHOP_POSITIONAL_VALUES = {
-            {-20, -10, -10, -10, -10, -10, -10, -20},
-            {-10,   5,   0,   0,   0,   0,   5, -10},
-            {-10,  10,  10,  10,  10,  10,  10, -10},
-            {-10,   0,  10,  10,  10,  10,   0, -10},
-            {-10,   5,   5,  10,  10,   5,   5, -10},
-            {-10,   0,   5,  10,  10,   5,   0, -10},
-            {-10,   0,   0,   0,   0,   0,   0, -10},
-            {-20, -10, -10, -10, -10, -10, -10, -20}
+            {1, 2, 2, 2, 2, 2, 2, 1},
+            {2, 3, 3, 3, 3, 3, 3, 2},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {2, 3, 3, 3, 3, 3, 3, 2},
+            {1, 2, 2, 2, 2, 2, 2, 1}
+    };
+
+    private static final int[][] ROOK_POSITIONAL_VALUES = {
+            {1, 2, 3, 4, 4, 3, 2, 1},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {3, 4, 4, 4, 4, 4, 4, 3},
+            {4, 4, 4, 4, 4, 4, 4, 4},
+            {4, 4, 4, 4, 4, 4, 4, 4},
+            {3, 4, 4, 4, 4, 4, 4, 3},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {1, 2, 3, 4, 4, 3, 2, 1}
+    };
+
+    private static final int[][] QUEEN_POSITIONAL_VALUES = {
+            {1, 2, 3, 4, 4, 3, 2, 1},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {3, 4, 4, 4, 4, 4, 4, 3},
+            {4, 4, 4, 4, 4, 4, 4, 4},
+            {4, 4, 4, 4, 4, 4, 4, 4},
+            {3, 4, 4, 4, 4, 4, 4, 3},
+            {2, 3, 4, 4, 4, 4, 3, 2},
+            {1, 2, 3, 4, 4, 3, 2, 1}
+    };
+
+    private static final int[][] KING_POSITIONAL_VALUES = {
+            {1, 4, 3, 2, 2, 3, 4, 1},
+            {2, 3, 3, 3, 3, 3, 3, 2},
+            {3, 4, 4, 4, 4, 4, 4, 3},
+            {4, 4, 4, 4, 4, 4, 4, 4},
+            {4, 4, 4, 4, 4, 4, 4, 4},
+            {3, 4, 4, 4, 4, 4, 4, 3},
+            {3, 3, 3, 3, 3, 3, 3, 3},
+            {2, 4, 3, 2, 2, 3, 4, 2}
     };
 
     private static class MinimaxTask extends RecursiveTask<Integer> {
@@ -101,17 +131,11 @@ public class Board {
                 for (Position move : legalMoves) {
                     Board boardCopy = board.copy();
                     Piece copiedPiece = boardCopy.getPieceAt(piece.getPosition());
-                    Position originalPosition = copiedPiece.getPosition();
                     copiedPiece.move(move);
-                    Piece captured = boardCopy.deleteTakenPieces(copiedPiece);
+                    boardCopy.deleteTakenPieces(copiedPiece);
 
                     MinimaxTask task = new MinimaxTask(boardCopy, depth - 1, !isMaximizing, alpha, beta);
                     tasks.add(task);
-                    copiedPiece.move(originalPosition);
-                    if (captured != null) {
-                        if (isMaximizing) boardCopy.blackPieces.add(captured);
-                        else boardCopy.whitePieces.add(captured);
-                    }
                 }
             }
 
@@ -267,39 +291,33 @@ public class Board {
         }
         return legalMoves;
     }
-    public List<Position> getLegalMoves(List<Position> possibleMoves, Piece piece){
-        List<Position> legalMoves = getNextLegalMoves(possibleMoves,piece);
+    public List<Position> getLegalMoves(List<Position> possibleMoves, Piece piece) {
+        List<Position> legalMoves = getNextLegalMoves(possibleMoves, piece);
         Piece king = null;
-        if(Objects.equals(piece.getColor(), "White")){
-            for(Piece whitePiece : whitePieces){
-                if(whitePiece instanceof King){
-                    king = whitePiece;
-                }
-            }
+        if (Objects.equals(piece.getColor(), "White")) {
+            king = whitePieces.stream().filter(p -> p instanceof King).findFirst().orElse(null);
+            if (king == null) return Collections.emptyList(); // Ensure king is not null
             Board clonedBoard = copy();
             Piece clonedPiece = clonedBoard.whitePieces.stream()
-                    .filter(p -> p.getPosition().equals(piece.getPosition())) // Match based on position
+                    .filter(p -> p.getPosition().equals(piece.getPosition()))
                     .findFirst().orElse(null);
             Piece finalKing = king;
             Piece clonedKing = clonedBoard.whitePieces.stream()
                     .filter(p -> p instanceof King && p.getPosition().equals(finalKing.getPosition()))
                     .findFirst().orElse(null);
-            legalMoves = clonedBoard.filterMovesMakesCheck(clonedPiece,legalMoves,clonedKing);
-        }else{
-            for(Piece blackPiece : blackPieces){
-                if(blackPiece instanceof King){
-                    king = blackPiece;
-                }
-            }
+            legalMoves = clonedBoard.filterMovesMakesCheck(clonedPiece, legalMoves, clonedKing);
+        } else {
+            king = blackPieces.stream().filter(p -> p instanceof King).findFirst().orElse(null);
+            if (king == null) return Collections.emptyList(); // Ensure king is not null
             Board clonedBoard = copy();
             Piece clonedPiece = clonedBoard.blackPieces.stream()
-                    .filter(p -> p.getPosition().equals(piece.getPosition())) // Match based on position
+                    .filter(p -> p.getPosition().equals(piece.getPosition()))
                     .findFirst().orElse(null);
-            Piece finalKing = king;
+            Piece finalKing1 = king;
             Piece clonedKing = clonedBoard.blackPieces.stream()
-                    .filter(p -> p instanceof King && p.getPosition().equals(finalKing.getPosition()))
+                    .filter(p -> p instanceof King && p.getPosition().equals(finalKing1.getPosition()))
                     .findFirst().orElse(null);
-            legalMoves = clonedBoard.filterMovesMakesCheck(clonedPiece,legalMoves,clonedKing);
+            legalMoves = clonedBoard.filterMovesMakesCheck(clonedPiece, legalMoves, clonedKing);
         }
         return legalMoves;
     }
@@ -393,26 +411,27 @@ public class Board {
         }
         return false;
     }
-    private List<Position> filterMovesMakesCheck(Piece piece,List<Position> possibleMoves, Piece king){
+    private List<Position> filterMovesMakesCheck(Piece piece, List<Position> possibleMoves, Piece king) {
+        if (piece == null) {
+            return Collections.emptyList();
+        }
+
         List<Position> legalMoves = new ArrayList<>(possibleMoves);
-        for(Position possibleMove : possibleMoves){
+        for (Position possibleMove : possibleMoves) {
             Position oldPos = piece.getPosition();
             piece.move(possibleMove);
             Piece deletedPiece = deleteTakenPieces(piece);
-            List<Piece> enemyPieces;
-            if(Objects.equals(piece.getColor(), "White")){
-                enemyPieces = blackPieces;
-            } else{
-                enemyPieces = whitePieces;
-            }
-            if(isCheck(enemyPieces,king)){
+            List<Piece> enemyPieces = piece.getColor().equals("White") ? blackPieces : whitePieces;
+
+            if (isCheck(enemyPieces, king)) {
                 legalMoves.remove(possibleMove);
             }
+
             piece.move(oldPos);
-            if(deletedPiece != null){
-                if(Objects.equals(deletedPiece.getColor(), "White")){
+            if (deletedPiece != null) {
+                if (deletedPiece.getColor().equals("White")) {
                     whitePieces.add(deletedPiece);
-                } else{
+                } else {
                     blackPieces.add(deletedPiece);
                 }
             }
@@ -454,11 +473,17 @@ public class Board {
             for(Piece whitePiece : whitePieces){
                 Position pos = whitePiece.getPosition();
                 legalMoves = legalMoves.stream().filter(p -> (p.x != pos.x) || (p.y != pos.y)).collect(Collectors.toList());
+                if((pos.x==piece.getPosition().x-1) && (pos.y==piece.getPosition().y)){
+                    legalMoves = legalMoves.stream().filter(p -> p.x != pos.x-1).collect(Collectors.toList());
+                }
             }
             for(Piece blackPiece : blackPieces){
                 Position blackPos = blackPiece.getPosition();
                 Position pos = piece.getPosition();
                 legalMoves = legalMoves.stream().filter(p -> (p.x != blackPos.x) || (p.y != blackPos.y)).collect(Collectors.toList());
+                if((blackPos.x==piece.getPosition().x-1) && (blackPos.y==piece.getPosition().y)){
+                    legalMoves = legalMoves.stream().filter(p -> p.x != blackPos.x-1).collect(Collectors.toList());
+                }
                 if((blackPos.x==pos.x-1) && ((blackPos.y==pos.y+1) || (blackPos.y==pos.y-1))){
                     legalMoves.add(blackPos);
                 }
@@ -475,11 +500,17 @@ public class Board {
             for(Piece blackPiece : blackPieces){
                 Position pos = blackPiece.getPosition();
                 legalMoves = legalMoves.stream().filter(p -> (p.x != pos.x) || (p.y != pos.y)).collect(Collectors.toList());
+                if((pos.x==piece.getPosition().x+1) && (pos.y==piece.getPosition().y)){
+                    legalMoves = legalMoves.stream().filter(p -> p.x != pos.x+1).collect(Collectors.toList());
+                }
             }
             for(Piece whitePiece : whitePieces){
                 Position whitePos = whitePiece.getPosition();
                 Position pos = piece.getPosition();
                 legalMoves = legalMoves.stream().filter(p -> (p.x != whitePos.x) || (p.y != whitePos.y)).collect(Collectors.toList());
+                if((whitePos.x==piece.getPosition().x+1) && (whitePos.y==piece.getPosition().y)){
+                    legalMoves = legalMoves.stream().filter(p -> p.x != whitePos.x+1).collect(Collectors.toList());
+                }
                 if((whitePos.x==pos.x+1) && ((whitePos.y==pos.y+1) || (whitePos.y==pos.y-1))){
                     legalMoves.add(whitePos);
                 }
@@ -1026,10 +1057,10 @@ public class Board {
         }
     }
 
-    public int checkMate(String side){
+    public int checkMate(String side) {
         List<Piece> availablePieces = new ArrayList<>();
         Piece king = null;
-        if(side == "White"){
+        if (side.equals("White")) {
             for (Piece piece : whitePieces) {
                 if (!getLegalMoves(piece.getPossibleMoves(), piece).isEmpty()) {
                     availablePieces.add(piece);
@@ -1038,6 +1069,7 @@ public class Board {
                     king = piece;
                 }
             }
+            if (king == null) return 0; // Ensure king is not null
             if (availablePieces.isEmpty()) {
                 if (isCheck(blackPieces, king)) {
                     return 2;
@@ -1045,7 +1077,7 @@ public class Board {
                     return 1;
                 }
             }
-        } else{
+        } else {
             for (Piece piece : blackPieces) {
                 if (!getLegalMoves(piece.getPossibleMoves(), piece).isEmpty()) {
                     availablePieces.add(piece);
@@ -1054,6 +1086,7 @@ public class Board {
                     king = piece;
                 }
             }
+            if (king == null) return 0; // Ensure king is not null
             if (availablePieces.isEmpty()) {
                 if (isCheck(whitePieces, king)) {
                     return 2;
@@ -1074,111 +1107,57 @@ public class Board {
 
         if (whiteMate == 2) return Integer.MAX_VALUE;  // White wins
         if (blackMate == 2) return Integer.MIN_VALUE; // Black wins
+        if (blackMate == 1 || whiteMate == 1) return 0;  // Draw
 
         // If no checkmate, evaluate normal position
-        score += evaluateMaterial(whitePieces, "White");
-        score -= evaluateMaterial(blackPieces, "Black");
-
-        score += evaluateMobility(whitePieces, "White");
-        score -= evaluateMobility(blackPieces, "Black");
-
-        score += evaluatePieceCentralization(whitePieces);
-        score -= evaluatePieceCentralization(blackPieces);
-
-        score += evaluatePieceActivity(whitePieces, "White");
-        score -= evaluatePieceActivity(blackPieces, "Black");
+        score += evaluateMaterial(whitePieces);
+        score -= evaluateMaterial(blackPieces);
 
         return score;
     }
 
-    private int evaluatePieceCentralization(List<Piece> pieces) {
-        int centralScore = 0;
-        for (Piece piece : pieces) {
-            int pieceCentralization = getPieceCentralizationFactor(piece);
-            Position pos = piece.getPosition();
-            // Reward pieces closer to the center
-            if (pos.x >= 3 && pos.x <= 4 && pos.y >= 3 && pos.y <= 4) {
-                centralScore += pieceCentralization;
-            }
-        }
-        return centralScore;
-    }
-
-    private int evaluatePieceActivity(List<Piece> pieces, String color) {
-        int activityScore = 0;
-        for (Piece piece : pieces) {
-            activityScore += getPieceActivityFactor(piece);
-            // If the piece is in the center of the board, it's more active
-            Position pos = piece.getPosition();
-            if (pos.x >= 3 && pos.x <= 4 && pos.y >= 3 && pos.y <= 4) {
-                activityScore += 5;  // Extra bonus for central pieces
-            }
-        }
-        return activityScore;
-    }
-
-    private int getPieceCentralizationFactor(Piece piece) {
-        switch (piece.getClass().getSimpleName()) {
-            case "Queen": return 20;   // Queens are very powerful in the center
-            case "Rook": return 10;    // Rooks are slightly less powerful but still useful in the center
-            case "Bishop": return 8;   // Bishops are stronger when central
-            case "Knight": return 5;   // Knights gain more flexibility in the center
-            case "Pawn": return 3;     // Pawns controlling central squares
-            default: return 0;         // Non-central pieces are less important
-        }
-    }
-
-    private int getPieceActivityFactor(Piece piece) {
-        switch (piece.getClass().getSimpleName()) {
-            case "Queen": return 10;
-            case "Rook": return 8;
-            case "Bishop": return 6;
-            case "Knight": return 5;
-            case "Pawn": return 2;
-            default: return 0;
-        }
-    }
-
-    private int evaluateMaterial(List<Piece> pieces, String color) {
+    private int evaluateMaterial(List<Piece> pieces) {
         int score = 0;
-
         for (Piece piece : pieces) {
-            int pieceValue = getPieceValue(piece);
-
-            // Penalize for unproductive moves (i.e., rook moves back and forth)
-            if (piece instanceof Rook) {
-                score += pieceValue - 5;  // Small penalty for unnecessary rook moves
-            } else {
-                score += pieceValue;
-            }
+            score += getPieceValue(piece) + getPositionalValue(piece);
         }
-
         return score;
     }
 
-    private static int getPieceValue(Piece piece) {
-        if (!pieceValueCache.containsKey(piece)) {
-            pieceValueCache.put(piece, switch (piece.getClass().getSimpleName()) {
-                case "Queen" -> 900;  // Queen is highly valued
-                case "Rook" -> 500;
-                case "Bishop" -> 330;
-                case "Knight" -> 320;
-                case "Pawn" -> 100;
+    private int getPositionalValue(Piece piece) {
+        Position pos = piece.getPosition();
+        int[][] positionalValues;
+
+        if (piece instanceof Pawn) {
+            positionalValues = PAWN_POSITIONAL_VALUES;
+        } else if (piece instanceof Knight) {
+            positionalValues = KNIGHT_POSITIONAL_VALUES;
+        } else if (piece instanceof Bishop) {
+            positionalValues = BISHOP_POSITIONAL_VALUES;
+        } else if (piece instanceof Rook) {
+            positionalValues = ROOK_POSITIONAL_VALUES;
+        } else if (piece instanceof Queen) {
+            positionalValues = QUEEN_POSITIONAL_VALUES;
+        } else if (piece instanceof King) {
+            positionalValues = KING_POSITIONAL_VALUES;
+        } else {
+            return 0; // Default value for unknown pieces
+        }
+
+        return positionalValues[pos.x][pos.y];
+    }
+
+
+    public static int getPieceValue(Piece piece) {
+            int value = switch (piece.getClass().getSimpleName()) {
+                case "Queen" -> 36;  // Queen is highly valued
+                case "Rook" -> 20;
+                case "Bishop" -> 13;
+                case "Knight" -> 12;
+                case "Pawn" -> 4;
                 default -> 0;
-            });
-        }
-        return pieceValueCache.get(piece);
-    }
-
-
-    private int evaluateMobility(List<Piece> pieces, String color) {
-        int score = 0;
-
-        for (Piece piece : pieces) {
-            score += piece.getPossibleMoves().size();  // Mobility score based on available moves
-        }
-
-        return score;
+            };
+        return value;
     }
 
 

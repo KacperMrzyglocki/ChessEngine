@@ -524,26 +524,78 @@ public class ChessGUI extends Application {
         int bestValue = currentTurn.equals("White") ? Integer.MIN_VALUE : Integer.MAX_VALUE;
         Piece bestPiece = null;
         Position bestMove = null;
+        int alpha = Integer.MIN_VALUE;
+        int beta = Integer.MAX_VALUE;
 
         List<Piece> botPieces = currentTurn.equals("White") ? copiedBoard.whitePieces : copiedBoard.blackPieces;
 
         for (Piece piece : botPieces) {
             List<Position> legalMoves = copiedBoard.getLegalMoves(piece.getPossibleMoves(), piece);
+
+            // Sort legal moves based on capturing, check, and score
+            legalMoves.sort((m1, m2) -> {
+                Piece target1 = copiedBoard.getPieceAt(m1);
+                Piece target2 = copiedBoard.getPieceAt(m2);
+                int score1 = (target1 != null ? Board.getPieceValue(target1) : 0) + (copiedBoard.isCheckAfterMove(piece, m1) ? 50 : 0);
+                int score2 = (target2 != null ? Board.getPieceValue(target2) : 0) + (copiedBoard.isCheckAfterMove(piece, m2) ? 50 : 0);
+                return Integer.compare(score2, score1); // Prioritize higher scores
+            });
+
             for (Position move : legalMoves) {
                 Position originalPosition = piece.getPosition();
+                boolean firstMovePawn = false;
+                boolean enPassant = false;
+                boolean movedKing = false;
+                boolean movedRook = false;
                 piece.move(move);
-                int moveValue = copiedBoard.minimax(2, !currentTurn.equals("White"), Integer.MIN_VALUE, Integer.MAX_VALUE); // Depth of 3 for example
-                piece.move(originalPosition);
-
-                if (currentTurn.equals("White") && moveValue > bestValue) {
-                    bestValue = moveValue;
-                    bestPiece = piece;
-                    bestMove = move;
-                } else if (currentTurn.equals("Black") && moveValue < bestValue) {
-                    bestValue = moveValue;
-                    bestPiece = piece;
-                    bestMove = move;
+                if(piece instanceof Pawn){
+                    firstMovePawn = ((Pawn) piece).getFirstMove();
+                    enPassant = ((Pawn) piece).getEnPassant();
                 }
+                if(piece instanceof King){
+                    movedKing = ((King) piece).kingMoved();
+                }
+                if(piece instanceof Rook){
+                    movedRook = ((Rook) piece).rookMoved();
+                }
+                Piece deletedPiece = copiedBoard.deleteTakenPieces(piece);
+                int moveValue = copiedBoard.minimax(2, !currentTurn.equals("White"), alpha, beta); // Depth of 2 for example
+                piece.move(originalPosition); // Undo move
+                if(piece instanceof Pawn){
+                    ((Pawn) piece).setFirstMove(firstMovePawn);
+                    ((Pawn) piece).setEnPassant(enPassant);
+                }
+                if(piece instanceof King){
+                    ((King) piece).setMoved(movedKing);
+                }
+                if(piece instanceof Rook){
+                    ((Rook) piece).setMoved(movedRook);
+                }
+                if (deletedPiece != null) {
+                    if (deletedPiece.getColor().equals("White")) {
+                        copiedBoard.whitePieces.add(deletedPiece);
+                    } else {
+                        copiedBoard.blackPieces.add(deletedPiece);
+                    }
+                }
+
+                if (currentTurn.equals("White")) {
+                    if (moveValue > bestValue) {
+                        bestValue = moveValue;
+                        bestPiece = piece;
+                        bestMove = move;
+                    }
+                    alpha = Math.max(alpha, bestValue);
+                } else {
+                    if (moveValue < bestValue) {
+                        bestValue = moveValue;
+                        bestPiece = piece;
+                        bestMove = move;
+                    }
+                    beta = Math.min(beta, bestValue);
+                }
+
+                if (beta <= alpha) break; // Alpha-beta pruning
             }
         }
 
