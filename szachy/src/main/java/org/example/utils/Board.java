@@ -10,7 +10,10 @@ public class Board {
 
     public List<Piece> blackPieces = new CopyOnWriteArrayList<>();
     public List<Piece> whitePieces = new CopyOnWriteArrayList<>();
-    private static Map<Piece, Integer> pieceValueCache = new HashMap<>();
+    private TranspositionTable transpositionTable = new TranspositionTable();
+    private static final ForkJoinPool pool = new ForkJoinPool();
+    private Map<Integer, Move> bestMoves = new HashMap<>(); // Store best moves per depth
+
 
     private final Position[][] board = {
             {new Position(0,0),new Position(0,1),new Position(0,2),new Position(0,3),new Position(0,4),new Position(0,5),new Position(0,6),new Position(0,7)},
@@ -94,13 +97,20 @@ public class Board {
         private final boolean isMaximizing;
         private int alpha;
         private int beta;
+        private final TranspositionTable transpositionTable;
+        private final long zobristKey;
+        private final Move bestMovePrevDepth;
 
-        MinimaxTask(Board board, int depth, boolean isMaximizing, int alpha, int beta) {
+        MinimaxTask(Board board, int depth, boolean isMaximizing, int alpha, int beta,
+                    TranspositionTable transpositionTable, long zobristKey, Move bestMovePrevDepth) {
             this.board = board;
             this.depth = depth;
             this.isMaximizing = isMaximizing;
             this.alpha = alpha;
             this.beta = beta;
+            this.transpositionTable = transpositionTable;
+            this.zobristKey = zobristKey;
+            this.bestMovePrevDepth = bestMovePrevDepth;
         }
 
         @Override
@@ -109,50 +119,107 @@ public class Board {
                 return board.evaluateBoard();
             }
 
+            TranspositionTable.TranspositionEntry entry = transpositionTable.retrieve(zobristKey);
+            if (entry != null && entry.depth >= depth) {
+                if (entry.flag == 0) return entry.value;
+                if (entry.flag == 1 && entry.value <= alpha) return entry.value;
+                if (entry.flag == 2 && entry.value >= beta) return entry.value;
+            }
+
             List<Piece> pieces = isMaximizing ? board.whitePieces : board.blackPieces;
             int bestEval = isMaximizing ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+            Move bestMove = null;
+
+            List<Move> legalMoves = board.getAllLegalMoves(isMaximizing);
+            List<Move> moveOptions = new ArrayList<>(legalMoves);
+
+            // Move Ordering: Prioritize best move, captures, checks
+            moveOptions.sort((m1, m2) -> {
+                if (m1.equals(bestMovePrevDepth)) return -1; // Prioritize previous best move
+                int score1 = (m1.getCapturedPiece() != null ? Board.getPieceValue(m1.getCapturedPiece()) : 0);
+                int score2 = (m2.getCapturedPiece() != null ? Board.getPieceValue(m2.getCapturedPiece()) : 0);
+                return Integer.compare(score2, score1); // Sort by capture value
+            });
+
+            boolean parallelize = depth > 3;
             List<MinimaxTask> tasks = new ArrayList<>();
+            List<Integer> results = new ArrayList<>();
 
-            // Sort legal moves based on capturing, check, and score
-            for (Piece piece : pieces) {
-                List<Position> legalMoves = board.getLegalMoves(piece.getPossibleMoves(), piece);
+            for (Move moveOption : moveOptions) {
+                Board boardCopy = board.copy();
+                moveOption.apply(boardCopy);
+                long newZobristKey = board.updateZobristKey(zobristKey, moveOption);
 
-                legalMoves.sort((m1, m2) -> {
-                    Piece target1 = board.getPieceAt(m1);
-                    Piece target2 = board.getPieceAt(m2);
-                    int score1 = (target1 != null ? getPieceValue(target1) : 0) + (board.isCheckAfterMove(piece, m1) ? 50 : 0);
-                    int score2 = (target2 != null ? getPieceValue(target2) : 0) + (board.isCheckAfterMove(piece, m2) ? 50 : 0);
-                    int checkFactor = Integer.compare(board.isCheckAfterMove(piece, m2) ? 1 : 0, board.isCheckAfterMove(piece, m1) ? 1 : 0);
-                    if (checkFactor != 0) return checkFactor;
-                    int captureFactor = Integer.compare(score2, score1);
-                    return captureFactor != 0 ? captureFactor : Integer.compare(score2, score1);
-                });
+                int reduction = (depth > 2 && moveOption.getCapturedPiece() == null) ? 1 : 0;
+                int newDepth = depth - 1 - reduction; // Late Move Reduction (LMR)
+                MinimaxTask task = new MinimaxTask(boardCopy, newDepth, !isMaximizing, alpha, beta, transpositionTable, newZobristKey, moveOption);
 
-                for (Position move : legalMoves) {
-                    Board boardCopy = board.copy();
-                    Piece copiedPiece = boardCopy.getPieceAt(piece.getPosition());
-                    copiedPiece.move(move);
-                    boardCopy.deleteTakenPieces(copiedPiece);
-
-                    MinimaxTask task = new MinimaxTask(boardCopy, depth - 1, !isMaximizing, alpha, beta);
+                int eval = isMaximizing ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+                if (parallelize) {
                     tasks.add(task);
+                } else {
+                    eval = task.compute();
+                    results.add(eval);
+                }
+
+                if (!parallelize) {
+                    if (isMaximizing) {
+                        if (eval > bestEval) {
+                            bestEval = eval;
+                            bestMove = moveOption;
+                        }
+                        alpha = Math.max(alpha, bestEval);
+                    } else {
+                        if (eval < bestEval) {
+                            bestEval = eval;
+                            bestMove = moveOption;
+                        }
+                        beta = Math.min(beta, bestEval);
+                    }
+                    if (beta <= alpha) break;
                 }
             }
 
-            List<Integer> results = invokeAll(tasks).stream().map(MinimaxTask::join).collect(Collectors.toList());
-            for (int eval : results) {
-                if (isMaximizing) {
-                    bestEval = Math.max(bestEval, eval);
-                    alpha = Math.max(alpha, eval);
-                } else {
-                    bestEval = Math.min(bestEval, eval);
-                    beta = Math.min(beta, eval);
+            if (parallelize) {
+                results = invokeAll(tasks).stream().map(MinimaxTask::join).collect(Collectors.toList());
+                for (int eval : results) {
+                    if (isMaximizing) {
+                        if (eval > bestEval) {
+                            bestEval = eval;
+                            bestMove = moveOptions.get(results.indexOf(eval));
+                        }
+                        alpha = Math.max(alpha, bestEval);
+                    } else {
+                        if (eval < bestEval) {
+                            bestEval = eval;
+                            bestMove = moveOptions.get(results.indexOf(eval));
+                        }
+                        beta = Math.min(beta, bestEval);
+                    }
+                    if (beta <= alpha) break;
                 }
-                if (beta <= alpha) break;
             }
+
+            int flag = (bestEval <= alpha) ? 1 : (bestEval >= beta) ? 2 : 0;
+            transpositionTable.store(zobristKey, depth, bestEval, flag);
+
             return bestEval;
         }
     }
+
+
+    private long updateZobristKey(long zobristKey, Move move) {
+        zobristKey ^= TranspositionTable.getPieceKey(move.getPiece(), move.getOriginalPosition());
+        zobristKey ^= TranspositionTable.getPieceKey(move.getPiece(), move.getDestination());
+
+        if (move.getCapturedPiece() != null) {
+            zobristKey ^= TranspositionTable.getPieceKey(move.getCapturedPiece(), move.getDestination());
+        }
+
+        return zobristKey;
+    }
+
+
     public void initializeBoard(){
         initializeRooks();
         initializeKnights();
@@ -232,46 +299,15 @@ public class Board {
         whitePieces.add(new Pawn(color, board[6][7]));
     }
 
-    public void printBoard(){
-        System.out.println("#################");
-        for(int i=0;i<8;i++){
-            System.out.print("#");
-            for(int j=0;j<8;j++){
-                boolean printed = false;
-                for(Piece piece : whitePieces){
-                    if((piece.getPosition().x == i) && (piece.getPosition().y == j)){
-                        String symbol = piece.getSymbol().toLowerCase();
-                        System.out.print(symbol);
-                        printed = true;
-                    }
-                }
-                for(Piece piece : blackPieces){
-                    if((piece.getPosition().x == i) && (piece.getPosition().y == j)){
-                        System.out.print(piece.getSymbol());
-                        printed = true;
-                    }
-                }
-                if(!printed){
-                    System.out.print(" ");
-                }
-                if(j<7){
-                    System.out.print("|");
-                }
-            }
-            System.out.print("#"+((i+1)*8)%9+"\n");
-        }
-        System.out.println("#a#b#c#d#e#f#g#h#\n");
-    }
-
     public List<Position> getNextLegalMoves(List<Position> possibleMoves, Piece piece){
         List<Position> legalMoves = new ArrayList<>(possibleMoves);
-        if(Objects.equals(piece.getSymbol(), "B")){
+        if(piece instanceof Bishop){
             legalMoves = getLegalBishopMoves(possibleMoves, piece);
-        } else if(Objects.equals(piece.getSymbol(), "Q")){
+        } else if(piece instanceof Queen){
             legalMoves = getLegalQueenMoves(possibleMoves, piece);
-        } else if(Objects.equals(piece.getSymbol(), "R")){
+        } else if(piece instanceof Rook){
             legalMoves = getLegalRookMoves(possibleMoves, piece);
-        } else if(Objects.equals(piece.getSymbol(), "P")){
+        } else if(piece instanceof Pawn){
             legalMoves = getLegalPawnMoves(legalMoves, piece);
         } else{
             if(Objects.equals(piece.getColor(), "White")){
@@ -286,10 +322,18 @@ public class Board {
                 }
             }
         }
-        if(Objects.equals(piece.getSymbol(), "K")){
+        if(piece instanceof King){
             legalMoves = getLegalCastles(legalMoves,piece);
         }
         return legalMoves;
+    }
+    public List<Move> getAllLegalMoves(boolean isWhite) {
+        List<Piece> pieces = isWhite ? whitePieces : blackPieces;
+
+        return pieces.parallelStream()
+                .flatMap(p -> getLegalMoves(p.getPossibleMoves(), p).stream()
+                        .map(m -> new Move(p, m, getPieceAt(m))))
+                .collect(Collectors.toList());
     }
     public List<Position> getLegalMoves(List<Position> possibleMoves, Piece piece) {
         List<Position> legalMoves = getNextLegalMoves(possibleMoves, piece);
@@ -337,8 +381,7 @@ public class Board {
                 if (!enemyBlockingCastle(piece, enemyPieces, "Right")) {
                     for (Piece otherPiece : otherPieces) {
                         Position otherPos = otherPiece.getPosition();
-                        if (otherPiece instanceof Rook) {
-                            Rook rook = (Rook) otherPiece;
+                        if (otherPiece instanceof Rook rook) {
                             if ((pos.y + 1 == otherPos.y && pos.x == otherPos.x) || (pos.y + 2 == otherPos.y && pos.x == otherPos.x) || rook.rookMoved() || isCheck(enemyPieces, piece)) {
                                 legalMoves = legalMoves.stream().filter(p -> p.y != pos.y + 2).collect(Collectors.toList());
                             }
@@ -352,8 +395,7 @@ public class Board {
                 if (!enemyBlockingCastle(piece, enemyPieces, "Left")) {
                     for (Piece otherPiece : otherPieces) {
                         Position otherPos = otherPiece.getPosition();
-                        if (otherPiece instanceof Rook) {
-                            Rook rook = (Rook) otherPiece;
+                        if (otherPiece instanceof Rook rook) {
                             if ((pos.y - 1 == otherPos.y && pos.x == otherPos.x) || (pos.y - 2 == otherPos.y && pos.x == otherPos.x) || (pos.y - 3 == otherPos.y && pos.x == otherPos.x) || rook.rookMoved() || isCheck(enemyPieces, piece)) {
                                 legalMoves = legalMoves.stream().filter(p -> p.y != pos.y - 2).collect(Collectors.toList());
                             }
@@ -1112,7 +1154,6 @@ public class Board {
         // If no checkmate, evaluate normal position
         score += evaluateMaterial(whitePieces);
         score -= evaluateMaterial(blackPieces);
-
         return score;
     }
 
@@ -1146,8 +1187,6 @@ public class Board {
 
         return positionalValues[pos.x][pos.y];
     }
-
-
     public static int getPieceValue(Piece piece) {
             int value = switch (piece.getClass().getSimpleName()) {
                 case "Queen" -> 36;  // Queen is highly valued
@@ -1160,10 +1199,93 @@ public class Board {
         return value;
     }
 
+    public int iterativeDeepening(int maxDepth, boolean isMaximizing) {
+        int bestEval = isMaximizing ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+        long zobristKey = calculateZobristKey();
+        int window = 50;
 
-    public int minimax(int depth, boolean isMaximizing, int alpha, int beta) {
-        ForkJoinPool pool = new ForkJoinPool();
-        return pool.invoke(new MinimaxTask(this.copy(), depth, isMaximizing, alpha, beta));
+        for (int depth = 1; depth <= maxDepth; depth++) {
+            int alpha = bestEval - window, beta = bestEval + window;
+            int eval = minimax(depth, isMaximizing, alpha, beta, zobristKey);
+
+            if (eval <= alpha || eval >= beta) {
+                bestEval = minimax(depth, isMaximizing, Integer.MIN_VALUE, Integer.MAX_VALUE, zobristKey);
+            } else {
+                bestEval = eval;
+            }
+        }
+        return bestEval;
+    }
+
+    public int quiescenceSearch(int alpha, int beta, boolean isMaximizing) {
+        int standPat = evaluateBoard();
+        if (standPat >= beta) return beta;
+        if (standPat > alpha) alpha = standPat;
+
+        List<Move> captureMoves = getAllLegalMoves(isMaximizing).stream()
+                .filter(m -> m.getCapturedPiece() != null)
+                .collect(Collectors.toList());
+
+        for (Move move : captureMoves) {
+            Board boardCopy = this.copy();
+            move.apply(boardCopy);
+            long newZobristKey = boardCopy.updateZobristKey(calculateZobristKey(), move);
+
+            int score = -boardCopy.quiescenceSearch(-beta, -alpha, !isMaximizing);
+            move.undo(boardCopy);
+
+            if (score >= beta) return beta;
+            if (score > alpha) alpha = score;
+        }
+        return alpha;
+    }
+    public int minimax(int depth, boolean isMaximizing, int alpha, int beta, long zobristKey) {
+        if (depth <= 0) return quiescenceSearch(alpha, beta, isMaximizing);
+
+        // Find the current player's king
+        King king = findKing(isMaximizing);
+
+        // **Null Move Pruning: Only apply if the king is NOT in check**
+        if (depth >= 3 && king != null && !isCheck(isMaximizing ? blackPieces : whitePieces, king)) {
+            int nullMoveScore = -minimax(depth - 3, !isMaximizing, -beta, -beta + 1, zobristKey);
+            if (nullMoveScore >= beta) return beta;
+        }
+
+        TranspositionTable.TranspositionEntry entry = transpositionTable.retrieve(zobristKey);
+        if (entry != null && entry.depth >= depth) {
+            return entry.value;
+        }
+
+        int value = pool.invoke(new MinimaxTask(this.copy(), depth, isMaximizing, alpha, beta, transpositionTable, zobristKey, null));
+
+        int flag = (value <= alpha) ? 1 : (value >= beta) ? 2 : 0;
+        transpositionTable.store(zobristKey, depth, value, flag);
+
+        return value;
+    }
+
+
+    private King findKing(boolean isWhite) {
+        List<Piece> pieces = isWhite ? whitePieces : blackPieces;
+        for (Piece piece : pieces) {
+            if (piece instanceof King) {
+                return (King) piece;
+            }
+        }
+        return null; // Should never happen unless king is removed
+    }
+
+    private long calculateZobristKey() {
+        long key = 0L;
+        // Implement Zobrist hashing logic here
+        // For each piece on the board, update the key using its position and type
+        for (Piece piece : whitePieces) {
+            key ^= TranspositionTable.getPieceKey(piece, piece.getPosition());
+        }
+        for (Piece piece : blackPieces) {
+            key ^= TranspositionTable.getPieceKey(piece, piece.getPosition());
+        }
+        return key;
     }
 
     public Piece getPieceAt(Position position) {

@@ -43,6 +43,8 @@ public class ChessGUI extends Application {
     private ChoiceBox<String> gameModeChoiceBox;
     private String playerSide;
     private Label sideLabel;
+    private Position lastMoveFrom = null;
+    private Position lastMoveTo = null;
 
     @Override
     public void start(Stage primaryStage) {
@@ -66,6 +68,8 @@ public class ChessGUI extends Application {
         board.initializeBoard();
         currentTurn = "White";
         gameStarted = false;
+        lastMoveFrom = null;
+        lastMoveTo = null;
         drawBoard();
         whiteTimeLabel.setText("White Time: 00:00");
         blackTimeLabel.setText("Black Time: 00:00");
@@ -146,6 +150,14 @@ public class ChessGUI extends Application {
                 final int r = row, c = col;
                 square.setOnMouseClicked(e -> handleTileClick(e, r, c));
                 gridPane.add(square, col, row);
+            }
+        }
+        if (lastMoveFrom != null && lastMoveTo != null) {
+            highlightSelectedTile(lastMoveFrom.x, lastMoveFrom.y, Color.DARKSLATEBLUE);
+            highlightSelectedTile(lastMoveTo.x, lastMoveTo.y, Color.DARKSLATEBLUE);
+        }
+        for (int row = 0; row < HEIGHT; row++) {
+            for (int col = 0; col < WIDTH; col++) {
                 addPieceImage(row, col);
             }
         }
@@ -383,13 +395,19 @@ public class ChessGUI extends Application {
         } else {
             if (isValidMove(selectedPosition, clickedPosition)) {
                 movePiece(selectedPosition, clickedPosition);
-                switchTurn();
-                if (gameModeChoiceBox.getValue().equals("vs Bot") && !currentTurn.equals(playerSide)) {
-                    handleBotMove();
-                }
+                Platform.runLater(() -> {
+                    drawBoard(); // Draw the board immediately after the player's move
+                    switchTurn(); // Switch turn after the board is drawn
+                    if (gameModeChoiceBox.getValue().equals("vs Bot") && !currentTurn.equals(playerSide)) {
+                        new Thread(() -> {
+                            handleBotMove();
+                            Platform.runLater(this::drawBoard); // Draw the board after the bot's move
+                        }).start();
+                    }
+                });
             }
             selectedPosition = null;
-            drawBoard();
+            Platform.runLater(this::drawBoard);
         }
     }
 
@@ -440,7 +458,9 @@ public class ChessGUI extends Application {
         for (Piece piece : board.whitePieces) {
             if (piece.getPosition().equals(from)) {
                 setEnPassant(board);
-                handleCastle(piece, to);
+                if (piece instanceof King) {
+                    handleCastle(piece, to);
+                }
                 piece.move(to);
                 board.deleteTakenPieces(piece);
                 if(piece instanceof Pawn){
@@ -448,6 +468,8 @@ public class ChessGUI extends Application {
                         promotePawn((Pawn) piece);
                     }
                 }
+                lastMoveFrom = from;
+                lastMoveTo = to;
                 drawBoard();
                 return;
             }
@@ -455,7 +477,9 @@ public class ChessGUI extends Application {
         for (Piece piece : board.blackPieces) {
             if (piece.getPosition().equals(from)) {
                 setEnPassant(board);
-                handleCastle(piece, to);
+                if (piece instanceof King) {
+                    handleCastle(piece, to);
+                }
                 piece.move(to);
                 board.deleteTakenPieces(piece);
                 if(piece instanceof Pawn){
@@ -463,35 +487,31 @@ public class ChessGUI extends Application {
                         promotePawn((Pawn) piece);
                     }
                 }
+                lastMoveFrom = from;
+                lastMoveTo = to;
                 drawBoard();
                 return;
             }
         }
     }
 
-    private void setEnPassant(Board board){
-        for(Piece piece : board.blackPieces){
-            if(Objects.equals(piece.getSymbol(), "P")){
-                if(((Pawn) piece).getEnPassant()){
-                    ((Pawn) piece).setEnPassant(false);
-                }
+    private void setEnPassant(Board board) {
+        for (Piece piece : board.blackPieces) {
+            if (piece instanceof Pawn) {
+                ((Pawn) piece).setEnPassant(false);
             }
         }
-        for(Piece piece : board.whitePieces){
-            if(Objects.equals(piece.getSymbol(), "P")){
-                if(((Pawn) piece).getEnPassant()){
-                    ((Pawn) piece).setEnPassant(false);
-                }
+        for (Piece piece : board.whitePieces) {
+            if (piece instanceof Pawn) {
+                ((Pawn) piece).setEnPassant(false);
             }
         }
     }
 
     private void handleCastle(Piece piece, Position to) {
-        if (piece instanceof King) {
-            if (Math.abs(piece.getPosition().y - to.y) == 2) {
-                String side = (to.y > piece.getPosition().y) ? "Right" : "Left";
-                board.castle(piece, side);
-            }
+        if (Math.abs(piece.getPosition().y - to.y) == 2) {
+            String side = (to.y > piece.getPosition().y) ? "Right" : "Left";
+            board.castle(piece, side);
         }
     }
 
@@ -516,6 +536,7 @@ public class ChessGUI extends Application {
         Rectangle highlight = new Rectangle(TILE_SIZE, TILE_SIZE);
         highlight.setFill(color);
         highlight.setOpacity(0.5);
+        highlight.setMouseTransparent(true); // Make the highlight rectangle mouse transparent
         gridPane.add(highlight, col, row);
     }
 
@@ -548,27 +569,27 @@ public class ChessGUI extends Application {
                 boolean movedKing = false;
                 boolean movedRook = false;
                 piece.move(move);
-                if(piece instanceof Pawn){
+                if (piece instanceof Pawn) {
                     firstMovePawn = ((Pawn) piece).getFirstMove();
                     enPassant = ((Pawn) piece).getEnPassant();
                 }
-                if(piece instanceof King){
+                if (piece instanceof King) {
                     movedKing = ((King) piece).kingMoved();
                 }
-                if(piece instanceof Rook){
+                if (piece instanceof Rook) {
                     movedRook = ((Rook) piece).rookMoved();
                 }
                 Piece deletedPiece = copiedBoard.deleteTakenPieces(piece);
-                int moveValue = copiedBoard.minimax(2, !currentTurn.equals("White"), alpha, beta); // Depth of 2 for example
+                int moveValue = copiedBoard.iterativeDeepening(2, !currentTurn.equals("White")); // Depth of 2 for example
                 piece.move(originalPosition); // Undo move
-                if(piece instanceof Pawn){
+                if (piece instanceof Pawn) {
                     ((Pawn) piece).setFirstMove(firstMovePawn);
                     ((Pawn) piece).setEnPassant(enPassant);
                 }
-                if(piece instanceof King){
+                if (piece instanceof King) {
                     ((King) piece).setMoved(movedKing);
                 }
-                if(piece instanceof Rook){
+                if (piece instanceof Rook) {
                     ((Rook) piece).setMoved(movedRook);
                 }
                 if (deletedPiece != null) {
